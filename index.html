@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Prague Trip with Karina 🇨🇿 | Michelin Edition</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; background: #121212; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+        #map { height: 100vh; width: 100vw; z-index: 1; background: #121212; }
+        
+        /* HD КАРТА + ТЕМНАЯ ТЕМА */
+        .leaflet-layer, .leaflet-control-zoom-in, .leaflet-control-zoom-out, .leaflet-control-attribution {
+            filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%);
+        }
+
+        #top-ui {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 400px; z-index: 1000;
+            background: rgba(30, 30, 30, 0.85); padding: 12px; border-radius: 20px;
+            backdrop-filter: blur(12px); box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+        }
+        
+        #tabs { display: flex; gap: 8px; justify-content: space-between; margin-bottom: 12px; }
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.05); border: none; color: #aaa; font-weight: bold;
+            padding: 10px 8px; border-radius: 14px; cursor: pointer; flex-grow: 1; text-align: center;
+            transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .tab-btn.active { background: #ff4757; color: white; transform: scale(1.02); box-shadow: 0 4px 12px rgba(255, 71, 87, 0.4); }
+        .tab-btn:active { transform: scale(0.95); }
+
+        .progress-container { width: 100%; background: #2a2a2a; border-radius: 10px; height: 12px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #2ed573, #1db954); width: 0%; transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); border-radius: 10px; }
+        .progress-text { text-align: center; font-size: 12px; color: #bbb; margin-top: 6px; font-weight: bold; letter-spacing: 0.5px; }
+
+        .locate-btn {
+            position: absolute; top: 130px; right: 15px; z-index: 1000;
+            background: rgba(30, 30, 30, 0.9); border: 1px solid #444; color: white; border-radius: 50%; 
+            width: 48px; height: 48px; box-shadow: 0 6px 15px rgba(0,0,0,0.5); 
+            font-size: 20px; cursor: pointer; display: flex; justify-content: center; align-items: center;
+            transition: transform 0.2s, background 0.2s; backdrop-filter: blur(5px);
+        }
+        .locate-btn:active { transform: scale(0.9); background: #ff4757; border-color: #ff4757; }
+
+        #info-panel {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: rgba(22, 22, 24, 0.96); backdrop-filter: blur(20px); color: #fff; 
+            border-radius: 30px 30px 0 0; padding: 25px; box-sizing: border-box; 
+            z-index: 2000; box-shadow: 0 -10px 50px rgba(0,0,0,0.8); max-height: 85vh; overflow-y: auto;
+            transform: translateY(120%); will-change: transform; transition: transform 0.5s cubic-bezier(0.25, 1, 0.3, 1);
+        }
+        #info-panel.active { transform: translateY(0); }
+        
+        h2 { margin: 0 0 5px 0; color: #fff; font-size: 24px; letter-spacing: -0.5px; }
+        .step-label { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; display: block; }
+        
+        .tier-3-text { color: #ff4757; }
+        .tier-2-text { color: #ffa502; }
+        .tier-1-text { color: #3742fa; }
+
+        /* Короткое описание сразу на виду */
+        p.short-desc { margin: 0 0 10px 0; color: #eee; line-height: 1.5; font-size: 15px; font-weight: 500; }
+
+        /* Кнопка "Детальней" */
+        .details-toggle-btn {
+            background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #4facfe; padding: 12px 15px; border-radius: 12px; width: 100%; text-align: left;
+            font-weight: bold; font-size: 14px; cursor: pointer; margin: 10px 0 5px 0;
+            display: flex; justify-content: space-between; align-items: center; transition: background 0.2s;
+        }
+        .details-toggle-btn:active { background: rgba(255, 255, 255, 0.15); }
+        
+        /* Выпадающий блок с подробным текстом */
+        #stop-desc-container {
+            max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.25, 1, 0.3, 1);
+        }
+        #stop-desc-container.expanded { max-height: 300px; overflow-y: auto; }
+        
+        p.full-desc { margin: 8px 0 12px 0; color: #ccc; line-height: 1.6; font-size: 14px; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 10px; }
+        
+        .quest-box { background: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107; padding: 14px; border-radius: 0 12px 12px 0; margin: 15px 0; font-size: 14px; }
+        .quest-box strong { color: #ffc107; display: block; margin-bottom: 5px; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+
+        .details-box { background: rgba(255, 255, 255, 0.05); padding: 12px 15px; border-radius: 12px; margin: 12px 0; font-size: 14px; border: 1px solid rgba(255,255,255,0.08); }
+        .details-box span { display: block; margin-bottom: 6px; }
+        .details-box span:last-child { margin-bottom: 0; }
+        .details-box strong { color: #aaa; }
+        
+        .btn-group { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; padding-bottom: 15px; }
+        .btn-row { display: flex; gap: 12px; }
+        
+        .btn-complete { background: #2ed573; border: none; color: #000; padding: 16px; border-radius: 16px; font-weight: 800; font-size: 16px; cursor: pointer; transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); box-shadow: 0 4px 15px rgba(46, 213, 115, 0.3); }
+        .btn-complete:active { transform: scale(0.96); box-shadow: 0 2px 5px rgba(46, 213, 115, 0.3); }
+        .btn-complete.done { background: #333; color: #888; box-shadow: none; font-weight: 600; }
+        
+        .btn-google { background: #4285F4; border: none; color: white; padding: 15px; border-radius: 16px; flex: 2; font-weight: bold; font-size: 15px; text-decoration: none; display: flex; justify-content: center; align-items: center; transition: all 0.2s; box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3); }
+        .btn-google:active { transform: scale(0.96); background: #3367d6; }
+        .btn-close { background: #333; border: none; color: white; padding: 15px; border-radius: 16px; flex: 1; font-weight: bold; font-size: 15px; cursor: pointer; transition: all 0.2s; }
+        .btn-close:active { transform: scale(0.95); background: #222; }
+
+        @keyframes popIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            60% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .custom-marker { background: transparent; border: none; }
+        
+        .marker-inner {
+            border: 2px solid #121212; border-radius: 50%;
+            width: 32px; height: 32px; display: flex; justify-content: center; align-items: center;
+            font-weight: 800; box-shadow: 0 4px 12px rgba(0,0,0,0.8);
+            animation: popIn 0.5s cubic-bezier(0.25, 1, 0.3, 1) forwards;
+            opacity: 0; 
+        }
+        .tier-3 { background: #ff4757; color: white; font-size: 15px; }
+        .tier-2 { background: #ffa502; color: #111; font-size: 12px; width: 28px; height: 28px; margin-top: 2px; margin-left: 2px; }
+        .tier-1 { background: #3742fa; color: white; font-size: 16px; width: 24px; height: 24px; margin-top: 4px; margin-left: 4px; }
+        
+        .marker-inner.done { background: #2ed573 !important; color: #111 !important; border-color: white !important; box-shadow: 0 0 15px rgba(46, 213, 115, 0.5) !important; font-size: 16px !important; }
+    </style>
+</head>
+<body>
+
+    <div id="top-ui">
+        <div id="tabs">
+            <button class="tab-btn active" onclick="loadDay(1, this)">День 1</button>
+            <button class="tab-btn" onclick="loadDay(2, this)">День 2</button>
+            <button class="tab-btn" onclick="loadDay(3, this)">День 3</button>
+        </div>
+        <div class="progress-container"><div class="progress-bar" id="prog-bar"></div></div>
+        <div class="progress-text" id="prog-text">Пройдено основных: 0 / 5</div>
+    </div>
+
+    <button class="locate-btn" onclick="locateUser()">📍</button>
+    <div id="map"></div>
+
+    <div id="info-panel">
+        <span class="step-label" id="stop-step">Шаг X</span>
+        <h2 id="stop-title">Название</h2>
+        
+        <div class="details-box">
+            <span>⏱ <strong>Займет времени:</strong> <span id="stop-duration" style="color: #fff;">~40 мин</span></span>
+            <span>📍 <strong>Адрес:</strong> <span id="stop-address" style="color: #fff;">Улица 1</span></span>
+        </div>
+
+        <!-- Короткое описание сразу на виду -->
+        <p class="short-desc" id="stop-short">Короткая суть локации...</p>
+
+        <!-- Кнопка "Детальней" для разворота лонгрида -->
+        <button class="details-toggle-btn" onclick="toggleDetails()">
+            <span>📖 Читать историю и подробности</span>
+            <span id="toggle-arrow">▼</span>
+        </button>
+
+        <!-- Раскрывающийся блок с подробным текстом -->
+        <div id="stop-desc-container">
+            <p class="full-desc" id="stop-full">Подробное описание...</p>
+        </div>
+
+        <div class="quest-box">
+            <strong>Сайд-квест:</strong>
+            <span id="stop-quest">Текст квеста</span>
+        </div>
+        
+        <div class="btn-group">
+            <button id="btn-done" class="btn-complete" onclick="toggleComplete()">✅ Отметить пройденным</button>
+            <div class="btn-row">
+                <a id="google-link" href="#" target="_blank" class="btn-google">В Google Карты</a>
+                <button class="btn-close" onclick="closePanel()">Скрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        const map = L.map('map', { zoomControl: false, tap: false }).setView([50.0835, 14.4362], 14);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap',
+            maxZoom: 19,
+            detectRetina: true
+        }).addTo(map);
+
+        const itinerary = {
+            1: [
+                { 
+                    id: "d1_1", tier: 3, lat: 50.0832, lng: 14.4350, duration: "Около 1 часа", address: "Wilsonova 300/8", 
+                    title: "Вокзал & Хата", 
+                    short: "Прибытие на главный вокзал, заселение в квартиру и подготовка к старту погулки.",
+                    desc: "Приехали, заселились, скинули сумки. Перевели дух, умылись после дороги и заряженные идем в центр покорять Прагу.", 
+                    quest: "Успешно найти нужную парадную, разобраться с ключом от хаты и выбить ачивку 'Заселение без нервов'." 
+                },
+                { 
+                    id: "d1_2", tier: 3, lat: 50.0797, lng: 14.4300, duration: "40 - 60 минут", address: "Václavské nám. 68", 
+                    title: "Вацлавская площадь", 
+                    short: "Прогулка по легендарному широкому бульвару с покупкой сосиски Klobása.",
+                    desc: "Огромный исторический бульвар. Здесь берем у уличных ребят культовую чешскую сосиску (Klobása) с горчицей и неспеша идем вниз.", 
+                    quest: "Сделать эстетичное фото Карины на фоне монументального Национального музея, пока горит вечерняя подсветка." 
+                },
+                { 
+                    id: "d1_opt1", tier: 1, lat: 50.0817, lng: 14.4208, duration: "10 минут", address: "Charvátova", 
+                    title: "Вращающаяся голова Кафки", 
+                    short: "Залипательная 42-тонная кинетическая скульптура из зеркальных пластин.",
+                    desc: "Странная и залипательная штука: 42 тонны зеркальных металлических панелей крутятся в разные стороны и складываются в лицо писателя Франца Кафки.", 
+                    quest: "Постоять пару минут и дождаться, пока все металлические этажи синхронно соберутся в единое лицо." 
+                },
+                { 
+                    id: "d1_3", tier: 3, lat: 50.0872, lng: 14.4281, duration: "20 - 30 минут", address: "Nám. Republiky 5", 
+                    title: "Пороховая башня", 
+                    short: "Мрачная готическая башня из черного камня у входа в Старый город.",
+                    desc: "Мрачная и монументальная готическая башня из черного камня, с которой начинались все королевские коронации в городе.", 
+                    quest: "Обязательно задрать головы вверх, оценить детализацию средневековых барельефов и зафоткаться на фоне готики." 
+                },
+                { 
+                    id: "d1_4", tier: 3, lat: 50.0869, lng: 14.4207, duration: "45 - 60 минут", address: "Staroměstské nám. 1", 
+                    title: "Староместская ратуша", 
+                    short: "Сердце Праги с часами Орлой и панорамным видом на 360 градусов с высоты.",
+                    desc: "Сердце старого города с легендарными астрономическими часами. Берем билет, лифт домчит наверх, и перед вами откроется вид на 360 градусов.", 
+                    quest: "Взобраться на 70-метровую высоту и попытаться сверху отыскать крышу вашей съемной квартиры." 
+                },
+                { 
+                    id: "d1_opt2", tier: 2, lat: 50.0754, lng: 14.4141, duration: "20 минут", address: "Jiráskovo nám. 1981/6", 
+                    title: "Танцующий дом", 
+                    short: "Авангардное здание в стиле деконструктивизма, похожее на танцующую пару.",
+                    desc: "Знаменитое здание деконструктивизма, которое архитекторы построили в шутку. Оно выглядит так, будто два танцора (Фред и Джинджер) застыли в танце.", 
+                    quest: "Обязательно сделать классическую дурацкую фотку, где вы типа подпираете рукой падающий угол здания." 
+                },
+                { 
+                    id: "d1_5", tier: 3, lat: 50.0862, lng: 14.4140, duration: "Пока не надоест", address: "Karlův most", 
+                    title: "Карлов мост", 
+                    short: "Главная вечерняя романтическая легенда Праги с фонарями и музыкантами.",
+                    desc: "Главная легенда Праги. Вечером здесь зажигаются старинные фонари, играют уличные музыканты, а над водой стоит мистический вайб.", 
+                    quest: "Найти тот самый культовый крест под фонарем (как на фотке Depeche Mode 1988 года), потереть статую Яна Непомуцкого и загадать желание." 
+                }
+            ],
+            2: [
+                { 
+                    id: "d2_1", tier: 3, lat: 50.0905, lng: 14.4005, duration: "2 - 2.5 часа", address: "Pražský hrad", 
+                    title: "Пражский Град", 
+                    short: "Крупнейший замок мира, собор Святого Вита и панорама города.",
+                    desc: "Заезжаем наверх на трамвае №22 без лишнего потения в гору. Гуляем по древним дворам и заходим в грандиозный собор Святого Вита.", 
+                    quest: "Задрать голову внутри собора Святого Вита так высоко, чтобы офигеть от гигантских готических витражей." 
+                },
+                { 
+                    id: "d2_opt1", tier: 2, lat: 50.0898, lng: 14.4063, duration: "40 минут", address: "Letenská 123/4", 
+                    title: "Вальдштейнский сад", 
+                    short: "Тихий ренессансный парк под замком с фонтанами и ручными павлинами.",
+                    desc: "Роскошный тихий парк прямо под замком. Там невероятные сталактитовые стены, фонтаны и абсолютно ручные пестрые павлины.", 
+                    quest: "Отыскать вальяжно прогуливающегося павлина и заставить его распустить хвост ради крутого кадра." 
+                },
+                { 
+                    id: "d2_opt2", tier: 1, lat: 50.0883, lng: 14.4093, duration: "10 минут", address: "U Lužického semináře", 
+                    title: "Самая узкая улица", 
+                    short: "Улочка шириной 70 см со специальным пешеходным светофором.",
+                    desc: "Улочка шириной всего в 70 сантиметров. Двум людям там не разминуться, поэтому стоит специальный пешеходный светофор.", 
+                    quest: "Дождаться зеленого сигнала, пойти навстречу друг другу и протиснуться на узком участке без давки." 
+                },
+                { 
+                    id: "d2_opt3", tier: 1, lat: 50.0880, lng: 14.4100, duration: "10 минут", address: "Cihelná 2b", 
+                    title: "Свистящие статуи", 
+                    short: "Интерактивный арт-объект Давида Черного во дворе музея.",
+                    desc: "Две скандальные бронзовые фигуры работы Давида Черного, которые справляют нужду в бассейн в форме карты Чехии и при этом двигаются.", 
+                    quest: "Отправить платное SMS на номер, указанный рядом со статуями, и посмотреть, как механический парень 'напишет' ваш текст струей." 
+                },
+                { 
+                    id: "d2_2", tier: 3, lat: 50.0861, lng: 14.4068, duration: "40 минут", address: "Velkopřevorské náměstí", 
+                    title: "Стена Леннона & Кампа", 
+                    short: "Культовая стена с граффити и мирным вайбом на острове Кампа.",
+                    desc: "Яркая, постоянно меняющаяся стена с граффити в честь Джона Леннона и мира во всем мире. Рядом тихий остров Кампа.", 
+                    quest: "Достать маркер или ручку и аккуратно вписать где-нибудь на стене ваши инициалы на память." 
+                },
+                { 
+                    id: "d2_3", tier: 3, lat: 50.0846, lng: 14.4213, duration: "1 - 1.5 часа", address: "Havelská 501/23", 
+                    title: "Обед: Havelská Koruna", 
+                    short: "Легендарная чешская столовка с аутентичным гуляшом и кнедликами.",
+                    desc: "Легендарная чешская столовка в центре. Берешь поднос, набираешь гору традиционного гуляша с кнедликами и наедаешься до отвала.", 
+                    quest: "Обязательно взять к обеду местную травяную газировку 'Кофола' (Kofola) вместо привычной колы." 
+                },
+                { 
+                    id: "d2_4", tier: 3, lat: 50.0942, lng: 14.4190, duration: "1 - 2 часа", address: "Letenské sady", 
+                    title: "Letenské sady", 
+                    short: "Парк на холме с открытым биргарденом и панорамой на мосты.",
+                    desc: "Огромный парк на холме с культовым открытым биргарденом. Отличное место, чтобы взять по пинте и залипнуть на мосты.", 
+                    quest: "Найти смотровую площадку возле гигантского красного Метронома и выпить пива с лучшим видом на Влтаву." 
+                },
+                { 
+                    id: "d2_5", tier: 3, lat: 50.0823, lng: 14.4176, duration: "Вечером", address: "Národní 339/11", 
+                    title: "Vzorkovna (Dog Bar)", 
+                    short: "Андеграундный лабиринт-бар с живой музыкой и гигантскими собаками.",
+                    desc: "Лютейший андеграундный лабиринт-бар. Закидываешь кэш на чип, вокруг живая музыка, двухъярусные кровати и огромные собаки.", 
+                    quest: "Обязательно отыскать местную гигантскую собаку-волкодава, погладить её и охереть от атмосферы места." 
+                }
+            ],
+            3: [
+                { 
+                    id: "d3_1", tier: 3, lat: 50.0832, lng: 14.4350, duration: "30 минут", address: "Wilsonova 300/8", 
+                    title: "Вокзал (Камеры хранения)", 
+                    short: "Сдаем вещи на вокзале в камеры хранения и берем свежий трдельник.",
+                    desc: "Приходим на вокзал, сбываем тяжелые рюкзаки в автоматические камеры хранения и налегке уходим гулять.", 
+                    quest: "Схватить по горячему свежему трдельнику с нутеллой прямо на вокзале, чтобы зарядиться на утренний хайкинг." 
+                },
+                { 
+                    id: "d3_2", tier: 3, lat: 50.0645, lng: 14.4179, duration: "2 - 2.5 часа", address: "V Pevnosti 159/5B", title: "Вышеград", 
+                    short: "Древняя тихая крепость на скале с панорамными видами на реку.",
+                    desc: "Древняя крепость на мощной скале над рекой. Туристов тут гораздо меньше, атмосфера спокойная, а виды на изгибы реки — космос.", 
+                    quest: "Прогуляться по историческому кладбищу Славин, где похоронены великие чешские композиторы и писатели." 
+                },
+                { 
+                    id: "d3_opt1", tier: 2, lat: 50.0718, lng: 14.4137, duration: "1 час", address: "Rašínovo nábřeží", 
+                    title: "Наплавка (Náplavka)", 
+                    short: "Оживленная набережная у воды, бары в арках и тусовки лебедей.",
+                    desc: "Оживленная гранитная набережная вдоль реки. Здесь швартуются кораблики, работают бары прямо в арках стены и тусуются лебеди.", 
+                    quest: "Подойти к кромке воды и попытаться пофоткаться с наглыми пражскими лебедями." 
+                },
+                { 
+                    id: "d3_3", tier: 3, lat: 50.0768, lng: 14.4326, duration: "1 - 1.5 часа", address: "Anglická 511/15", 
+                    title: "Обед: Pho Vietnam", 
+                    short: "Культовая вьетнамская фошная с огромными порциями аутентичного супа.",
+                    desc: "Финальный гастрономический аккорд. Пражская вьетнамская диаспора готовит суп Фо-Бо так мощно, что тарелки улетают за минуту.", 
+                    quest: "Влить в свой финальный суп фирменный острый соус и проверить себя на прочность." 
+                },
+                { 
+                    id: "d3_4", tier: 3, lat: 50.0836, lng: 14.4356, duration: "До отправления", address: "Wilsonova 300/8", 
+                    title: "Отъезд (Платформы)", 
+                    short: "Забираем рюкзаки, покупаем снеки в Билле и садимся в поезд.",
+                    desc: "Возвращаемся на вокзал, забираем вещи из камеры хранения, берем в Билле перекус в дорогу и грузимся в поезд.", 
+                    quest: "Сделать традиционное финальное селфи в вагоне. Миссия выполнена, Прага разъебана!" 
+                }
+            ]
+        };
+
+        let visitedPlaces = JSON.parse(localStorage.getItem('prague_visited')) || {};
+        let currentLayerGroup = L.featureGroup().addTo(map);
+        let polylineLayer = null;
+        let activePointId = null;
+        let activeDay = 1;
+        let activeMarkerInfo = []; 
+
+        function loadDay(day, btnElement) {
+            if (btnElement) {
+                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                btnElement.classList.add('active');
+            }
+            activeDay = day;
+            closePanel();
+            currentLayerGroup.clearLayers();
+            if (polylineLayer) map.removeLayer(polylineLayer);
+            activeMarkerInfo = [];
+
+            const points = itinerary[day];
+            const mainRouteLatLngs = [];
+            let mainIndexCounter = 1;
+
+            points.forEach((loc) => {
+                const isMain = loc.tier === 3;
+                if (isMain) mainRouteLatLngs.push([loc.lat, loc.lng]);
+                
+                const isDone = visitedPlaces[loc.id];
+                const markerNum = isMain ? mainIndexCounter : (loc.tier === 2 ? '★★' : '★');
+                
+                let tierClass = 'tier-3';
+                if (loc.tier === 2) tierClass = 'tier-2';
+                if (loc.tier === 1) tierClass = 'tier-1';
+
+                const htmlContent = `<div class="marker-inner ${tierClass} ${isDone ? 'done' : ''}" style="animation-delay: ${isMain ? (mainIndexCounter * 0.1) : 0.8}s">${isDone ? '✓' : markerNum}</div>`;
+                
+                const icon = L.divIcon({ className: 'custom-marker', html: htmlContent, iconSize: [32, 32], iconAnchor: [16, 16] });
+
+                const marker = L.marker([loc.lat, loc.lng], { icon: icon }).addTo(currentLayerGroup);
+                
+                activeMarkerInfo.push({ id: loc.id, marker: marker, tier: loc.tier, displayStr: markerNum });
+                
+                if (isMain) mainIndexCounter++;
+
+                marker.on('click', () => {
+                    activePointId = loc.id;
+                    
+                    let tierText = '';
+                    let tierColor = '';
+                    if (loc.tier === 3) { tierText = '🔴 Основной маршрут (3 Звезды)'; tierColor = 'tier-3-text'; }
+                    if (loc.tier === 2) { tierText = '🟠 Ради этого стоит сделать крюк (2 Звезды)'; tierColor = 'tier-2-text'; }
+                    if (loc.tier === 1) { tierText = '🔵 Если идете мимо (1 Звезда)'; tierColor = 'tier-1-text'; }
+
+                    document.getElementById('stop-step').innerHTML = `<span class="${tierColor}">${tierText}</span>`;
+                    document.getElementById('stop-title').innerText = loc.title;
+                    document.getElementById('stop-duration').innerText = loc.duration;
+                    document.getElementById('stop-address').innerText = loc.address;
+                    
+                    // Выводим короткое и полное описание
+                    document.getElementById('stop-short').innerText = loc.short;
+                    document.getElementById('stop-full').innerText = loc.desc;
+                    document.getElementById('stop-quest').innerText = loc.quest;
+                    
+                    // Сворачиваем подробный текст при открытии новой точки
+                    document.getElementById('stop-desc-container').classList.remove('expanded');
+                    document.getElementById('toggle-arrow').innerText = '▼';
+
+                    document.getElementById('google-link').href = `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=walking`;
+                    
+                    updateCompleteButton();
+                    document.getElementById('info-panel').classList.add('active');
+                    map.flyTo([loc.lat - 0.002, loc.lng], 16, { animate: true, duration: 1, easeLinearity: 0.25 });
+                });
+            });
+
+            polylineLayer = L.polyline(mainRouteLatLngs, { color: '#ff4757', weight: 4, dashArray: '8, 8', opacity: 0 }).addTo(map);
+            setTimeout(() => { polylineLayer.setStyle({opacity: 0.7}); }, 300);
+
+            map.fitBounds(currentLayerGroup.getBounds(), { padding: [60, 60], animate: true, duration: 1 });
+            updateProgressBar();
+        }
+
+        // Переключение видимости лонгрида
+        function toggleDetails() {
+            const container = document.getElementById('stop-desc-container');
+            const arrow = document.getElementById('toggle-arrow');
+            container.classList.toggle('expanded');
+            if (container.classList.contains('expanded')) {
+                arrow.innerText = '▲';
+            } else {
+                arrow.innerText = '▼';
+            }
+        }
+
+        function toggleComplete() {
+            if (!activePointId) return;
+            const isNowDone = !visitedPlaces[activePointId];
+            
+            if (isNowDone) visitedPlaces[activePointId] = true; 
+            else delete visitedPlaces[activePointId]; 
+            
+            localStorage.setItem('prague_visited', JSON.stringify(visitedPlaces));
+            
+            updateCompleteButton();
+            updateProgressBar();
+            
+            const currentMarkerObj = activeMarkerInfo.find(m => m.id === activePointId);
+            if (currentMarkerObj) {
+                let tClass = currentMarkerObj.tier === 3 ? 'tier-3' : (currentMarkerObj.tier === 2 ? 'tier-2' : 'tier-1');
+                const newHtml = `<div class="marker-inner ${tClass} ${isNowDone ? 'done' : ''}" style="animation: none; opacity: 1;">${isNowDone ? '✓' : currentMarkerObj.displayStr}</div>`;
+                currentMarkerObj.marker.setIcon(L.divIcon({ className: 'custom-marker', html: newHtml, iconSize: [32, 32], iconAnchor: [16, 16] }));
+            }
+        }
+
+        function updateCompleteButton() {
+            const btn = document.getElementById('btn-done');
+            if (visitedPlaces[activePointId]) {
+                btn.classList.add('done'); btn.innerText = "🔙 Снять отметку";
+            } else {
+                btn.classList.remove('done'); btn.innerText = "✅ Отметить пройденным";
+            }
+        }
+
+        function updateProgressBar() {
+            const mainPoints = itinerary[activeDay].filter(p => p.tier === 3);
+            const completedCount = mainPoints.filter(p => visitedPlaces[p.id]).length;
+            const percent = (completedCount / mainPoints.length) * 100;
+            
+            document.getElementById('prog-bar').style.width = `${percent}%`;
+            document.getElementById('prog-text').innerText = `Пройдено основных: ${completedCount} / ${mainPoints.length}`;
+        }
+
+        function closePanel() { document.getElementById('info-panel').classList.remove('active'); }
+
+        let userMarker;
+        function locateUser() { map.locate({setView: true, maxZoom: 16}); }
+        map.on('locationfound', function(e) {
+            if (userMarker) { map.removeLayer(userMarker); }
+            userMarker = L.circleMarker(e.latlng, { radius: 9, fillColor: "#4facfe", color: "#fff", weight: 3, fillOpacity: 1 }).addTo(map);
+        });
+
+        loadDay(1);
+    </script>
+</body>
+</html>
